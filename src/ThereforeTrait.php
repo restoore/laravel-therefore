@@ -14,9 +14,10 @@ trait ThereforeTrait
 
     public function searchDocuments()
     {
+        $searchableField = $this->thereforeSearchableField;
         $result = \Therefore::ExecuteSimpleQuery(['parameters' => ['CategoryNo' => $this->thereforeCategoryNo,
             'FieldNo' => $this->thereforeFieldNo,
-            'Condition' => $this->id,
+            'Condition' => $this->$searchableField,
             'OrderByFieldNo' => $this->thereforeFieldNo]]);
 
         if (!isset($result->ExecuteSimpleQueryResult->QueryResult->ResultRows->WSQueryResultRow))
@@ -71,5 +72,4 @@ trait ThereforeTrait
         if ($size)
             $file->update(['size' => $size]);
     }
-
 }

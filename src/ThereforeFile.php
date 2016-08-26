@@ -23,6 +23,16 @@ class ThereforeFile extends Model
         return config('therefore.file_path') . "{$this->categoryNo}/{$this->docNo}-{$this->streamNo}";
     }
 
+    public function getFileNameWithoutExtension()
+    {
+        return pathinfo($this->fileName, PATHINFO_FILENAME);
+    }
+
+    public function getExtension()
+    {
+        return pathinfo($this->fileName, PATHINFO_EXTENSION);
+    }
+
     public function deleteFromServer()
     {
         if ($this->isDownloaded())
@@ -43,5 +53,25 @@ class ThereforeFile extends Model
         } else {
             return round((int)$value / 1000, 1) . ' Ko';
         }
+    }
+
+    public function getThumbnailUrl()
+    {
+        $thumbFullPath = $this->getDirPath() . "/" . $this->getFileNameWithoutExtension() . '_thumb.jpg';
+        if(file_exists($thumbFullPath))
+            return url($thumbFullPath);
+
+        if (!is_dir($this->getDirPath())) {
+            mkdir($this->getDirPath(), 0755, true);
+        }
+        $response = \Therefore::GetThumbnail(['parameters' => ['DocNo' => $this->docNo]]);
+
+        $data = $response->GetThumbnailResult->ThumbnailFileData;
+
+        $size = file_put_contents($thumbFullPath, $data);
+        if ($size > 0)
+            return url($thumbFullPath);
+
+        return false;
     }
 }
