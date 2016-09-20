@@ -15,13 +15,11 @@ class CreateThereforeFilesTable extends Migration
         Schema::create('therefore_files', function (Blueprint $table) {
             $table->increments('id');
             $table->timestamps();
-            $table->integer('categoryNo');
-            $table->integer('docNo');
             $table->integer('streamNo');
-            $table->integer('versionNo');
             $table->string('fileName');
-            $table->string('searchableField');
             $table->integer('size');
+            $table->integer('therefore_document_id')->unsigned();
+            $table->foreign('therefore_document_id')->references('id')->on('therefore_documents')->onDelete('cascade');
         });
     }
 

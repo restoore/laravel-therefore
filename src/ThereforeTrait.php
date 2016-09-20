@@ -1,13 +1,9 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: SinfCONGf
- * Date: 24/08/2016
- * Time: 15:31
- */
 
 namespace Restoore\Therefore;
 
+use Restoore\Therefore\Models\ThereforeDocument;
+use Restoore\Therefore\Models\ThereforeFile;
 
 trait ThereforeTrait
 {
@@ -15,61 +11,93 @@ trait ThereforeTrait
     public function searchDocuments()
     {
         $searchableField = $this->thereforeSearchableField;
-        $result = \Therefore::ExecuteSimpleQuery(['parameters' => ['CategoryNo' => $this->thereforeCategoryNo,
+        $response = \Therefore::ExecuteSimpleQuery(['parameters' => ['CategoryNo' => $this->thereforeCategoryNo,
             'FieldNo' => $this->thereforeFieldNo,
             'Condition' => $this->$searchableField,
             'OrderByFieldNo' => $this->thereforeFieldNo]]);
+        $result = isset($response->ExecuteSimpleQueryResult->QueryResult->ResultRows->WSQueryResultRow) ?
+            $response->ExecuteSimpleQueryResult->QueryResult->ResultRows->WSQueryResultRow : false;
 
-        if (!isset($result->ExecuteSimpleQueryResult->QueryResult->ResultRows->WSQueryResultRow))
-            return false; //aucun fichiers trouvés
+        if (!$result)
+            return false; // files not found
 
-        return $result->ExecuteSimpleQueryResult->QueryResult->ResultRows->WSQueryResultRow;
+        return !is_array($result) ? [$result] : $result;
     }
 
     public function refreshCacheFiles()
     {
+        // get document in local DB
+        $searchableField = $this->thereforeSearchableField;
+        $docsDB = ThereforeDocument::where(['searchableField' => $this->$searchableField, 'CategoryNo' => $this->thereforeCategoryNo])->get();
+
         $rows = $this->searchDocuments();
-        foreach ($rows as $row) {
-            $theDocument = \Therefore::getDocument(['parameters' => ['DocNo' => $row->DocNo, 'IsStreamsInfoNeeded' => true]]);
-            //on supprime tous les fichiers présents pour cette catégorie
-            $deletedRows = ThereforeFile::where('docNo', $row->DocNo)->delete(); //retourne le nombre de ligne supprimées
+        // if documents have been found
+        if ($rows) {
+            foreach ($rows as $row) {
+                $theDocument = \Therefore::getDocument(['parameters' => ['DocNo' => $row->DocNo, 'IsStreamsInfoNeeded' => true]]);
+                $docThe = new ThereforeDocument;
+                $docThe->docNo = $theDocument->GetDocumentResult->IndexData->DocNo;
+                $docThe->categoryNo = $theDocument->GetDocumentResult->IndexData->CategoryNo;
+                $docThe->ctgryName = $theDocument->GetDocumentResult->IndexData->CtgryName;
+                $docThe->versionNo = $theDocument->GetDocumentResult->IndexData->VersionNo;
+                $docThe->lastChangeTime = $theDocument->GetDocumentResult->IndexData->LastChangeTime;
+                $docThe->title = $theDocument->GetDocumentResult->IndexData->Title;
+                $docThe->searchableField = $this->$searchableField;
 
-            //parcourt de tous les streams
-            foreach ($theDocument->GetDocumentResult->StreamsInfo as $stream) {
-                $file = new ThereforeFile;
-                $file->docNo = $row->DocNo;
-                $file->streamNo = $stream->StreamNo;
-                $file->categoryNo = $theDocument->GetDocumentResult->IndexData->CategoryNo;
-                $file->versionNo = $theDocument->GetDocumentResult->IndexData->VersionNo;
-                $file->fileName = $stream->FileName;
-                $searchableField = $this->thereforeSearchableField;
-                $file->searchableField = $this->$searchableField;
+                // check if document has streams
+                $streams = isset($theDocument->GetDocumentResult->StreamsInfo->WSStreamInfo) ?
+                    $theDocument->GetDocumentResult->StreamsInfo->WSStreamInfo : false;
+                if ($streams)
+                    $streams = is_array($streams) ? $streams : [$streams]; // get streams info of a document
 
-                // TODO: Compare Therefore DB and local DB to keep files already save and increase performance
-                /*if (ThereforeFile::where($file->toArray())->first())
-                    continue;*/
-
-                $file->saveOrFail();
-                $this->transfertFile($file); //download file
+                $isFound = false;
+                // check all docs in DB and compare to Therefore DB
+                foreach ($docsDB as $key => $docDB) {
+                    if ($docDB->docNo == $docThe->docNo) {
+                        // doc already exists, check LastchangeTime
+                        if ($docDB->lastChangeTime->ne($docThe->lastChangeTime)) {
+                            // delete doc
+                            $docDB->deleteFromServer();
+                            // save new document in local DB
+                            $docThe->saveOrFail();
+                            // let's get all streams
+                            $this->saveStreams($streams, $docThe->id);
+                        }
+                        $docsDB->forget($key);
+                        $isFound = true;
+                    }
+                }
+                // new document
+                if (!$isFound) {
+                    $docThe->saveOrFail();
+                    $this->saveStreams($streams, $docThe->id);
+                }
             }
         }
+        // delete documents still in local DB
+        foreach ($docsDB as $key => $docDB) {
+            $docDB->deleteFromServer();
+        }
     }
 
-    public function listFiles()
+    public function listDocuments()
     {
         $searchableField = $this->thereforeSearchableField;
-        return ThereforeFile::where(['searchableField' => $this->$searchableField])->get();
+        return ThereforeDocument::where(['searchableField' => $this->$searchableField])->get();
     }
 
-    private function transfertFile(ThereforeFile $file)
+    private function saveStreams($streams, $document_id)
     {
-        if (!is_dir($file->getDirPath())) {
-            mkdir($file->getDirPath(), 0755, true);
+        if(!$streams)
+            return false;
+
+        foreach ($streams as $stream) {
+            $fileThe = new ThereforeFile;
+            $fileThe->streamNo = $stream->StreamNo;
+            $fileThe->fileName = $stream->FileName;
+            $fileThe->therefore_document_id = $document_id;
+            $fileThe->saveOrFail();
+            $fileThe->transfert();
         }
-        $response = \Therefore::GetDocumentStream(['parameters' => ['DocNo' => $file->docNo, 'StreamNo' => $file->streamNo]]);
-        $data = $response->GetDocumentStreamResult->FileData;
-        $size = file_put_contents($file->getFullPath(), $data);
-        if ($size)
-            $file->update(['size' => $size]);
     }
 }
