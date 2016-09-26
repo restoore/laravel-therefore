@@ -3,6 +3,7 @@
   "description": "Integration package of Therefore Web API into Laravel applications",
   "type": "library",
   "license": "MIT",
+  "keywords": ["laravel", "lumen", "therefore", "EDMS"],
   "authors": [
     {
       "name": "Florian Congré",

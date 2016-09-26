@@ -130,6 +130,6 @@ $thereforefile->size
   public function deleteFromServer()				//Delete file from web server
   public function getUrl()							//Return full link of your file
   public function getSizeAttribute($value)			//Return formatted size of your file like "16.5 Mo" or "500 ko"
-  public function getThumbnailUrl()					//Return thumbnail url and if thumbnail doesn't exist create him
+  public function getThumbnailUrl()					//Return thumbnail url and if thumbnail doesn t exist create him
   public function deleteThumbnail()					//Delete thumbnail from web server
 ```
